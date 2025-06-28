@@ -78,7 +78,7 @@ let recognition;
 let recognizing = false;
 let unicodeText = '';
 let noAudioTimeout;
-let restartTimeout;
+let isManualStop = false;
 
 // --- Auto Reset on Page Load ---
 function resetText() {
@@ -127,12 +127,13 @@ function setupSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
             recognition.lang = 'ne-NP';
-            recognition.continuous = true;
+            recognition.continuous = false;
             recognition.interimResults = false;
             recognition.maxAlternatives = 1;
 
             recognition.onstart = () => {
                 recognizing = true;
+                isManualStop = false;
                 micButton.classList.add('recording');
                 statusDiv.textContent = 'सुनिरहनुभएको छ... नेपालीमा बोल्नुहोस्।';
                 micButton.querySelector('span').textContent = 'सुनिरहनुभएको छ...';
@@ -147,7 +148,6 @@ function setupSpeechRecognition() {
 
             recognition.onerror = (event) => {
                 clearTimeout(noAudioTimeout);
-                clearTimeout(restartTimeout);
                 let errorMessage = 'त्रुटि: ' + event.error;
                 
                 // Provide more specific error messages
@@ -171,11 +171,28 @@ function setupSpeechRecognition() {
 
             recognition.onend = () => {
                 clearTimeout(noAudioTimeout);
-                clearTimeout(restartTimeout);
-                recognizing = false;
-                micButton.classList.remove('recording');
-                statusDiv.textContent = 'मान्यता रोकियो। फेरि सुरु गर्न माइक्रोफोन थिच्नुहोस्।';
-                micButton.querySelector('span').textContent = 'यहाँ थिच्नुहोस्';
+                
+                // Only stop if it was manually stopped
+                if (isManualStop) {
+                    recognizing = false;
+                    micButton.classList.remove('recording');
+                    statusDiv.textContent = 'मान्यता रोकियो। फेरि सुरु गर्न माइक्रोफोन थिच्नुहोस्।';
+                    micButton.querySelector('span').textContent = 'यहाँ थिच्नुहोस्';
+                } else {
+                    // If not manually stopped, restart automatically for continuous listening
+                    setTimeout(() => {
+                        if (!isManualStop) {
+                            try {
+                                recognition.start();
+                            } catch (error) {
+                                console.error('Error restarting recognition:', error);
+                                recognizing = false;
+                                micButton.classList.remove('recording');
+                                micButton.querySelector('span').textContent = 'यहाँ थिच्नुहोस्';
+                            }
+                        }
+                    }, 100);
+                }
             };
 
             recognition.onresult = (event) => {
@@ -213,8 +230,10 @@ function setupSpeechRecognition() {
 
             micButton.onclick = () => {
                 if (recognizing) {
+                    isManualStop = true;
                     recognition.stop();
                 } else {
+                    isManualStop = false;
                     recognition.start();
                 }
             };
