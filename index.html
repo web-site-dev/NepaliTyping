@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ne">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>नेपाली आवाज टाइपिङ</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-microphone-alt"></i>
+                <h1>नेपाली आवाज टाइपिङ</h1>
+            </div>
+            <p class="subtitle">आवाजबाट प्रिती फन्टमा टाइप गर्नुहोस्</p>
+        </header>
+
+        <main>
+            <div class="voice-controls">
+                <button id="micButton" class="mic-button">
+                    <i class="fas fa-microphone"></i>
+                    <span>यहाँ थिच्नुहोस्</span>
+                </button>
+                <div class="status" id="status">
+                    माइक्रोफोन बटन थिचेर नेपालीमा बोल्नुहोस्
+                </div>
+            </div>
+
+            <div class="text-area-container">
+                <div class="text-controls">
+                    <button id="copyBtn" class="control-btn" title="कपी गर्नुहोस्">
+                        <i class="fas fa-copy"></i> कपी
+                    </button>
+                    <button id="resetBtn" class="control-btn" title="सफा गर्नुहोस्">
+                        <i class="fas fa-trash"></i> सफा
+                    </button>
+                </div>
+
+                <div class="text-display">
+                    <div class="text-content">
+                        <textarea id="preetiText" class="text-area active" placeholder="यहाँ तपाईंको नेपाली टेक्स्ट प्रिती फन्टमा देखिनेछ..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <div class="author-credit">
+            <p>प्रविज्ञ आचार्य</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 
