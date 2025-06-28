@@ -78,13 +78,12 @@ let recognition;
 let recognizing = false;
 let unicodeText = '';
 let noAudioTimeout;
-let lastFinalResult = ''; // Track the last final result to prevent duplicates
+let isManualStop = false;
 
 // --- Auto Reset on Page Load ---
 function resetText() {
     try {
         unicodeText = '';
-        lastFinalResult = '';
         if (preetiTextArea) {
             preetiTextArea.value = '';
         }
@@ -128,13 +127,13 @@ function setupSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
             recognition.lang = 'ne-NP';
-            recognition.continuous = true;
-            recognition.interimResults = true;
+            recognition.continuous = false; // Changed to false to prevent continuous accumulation
+            recognition.interimResults = false; // Changed to false to only get final results
             recognition.maxAlternatives = 1;
 
             recognition.onstart = () => {
                 recognizing = true;
-                lastFinalResult = ''; // Reset last result when starting
+                isManualStop = false;
                 micButton.classList.add('recording');
                 statusDiv.textContent = 'सुनिरहनुभएको छ... नेपालीमा बोल्नुहोस्।';
                 micButton.querySelector('span').textContent = 'सुनिरहनुभएको छ...';
@@ -174,44 +173,30 @@ function setupSpeechRecognition() {
                 clearTimeout(noAudioTimeout);
                 recognizing = false;
                 micButton.classList.remove('recording');
-                statusDiv.textContent = 'मान्यता रोकियो। फेरि सुरु गर्न माइक्रोफोन थिच्नुहोस्।';
-                micButton.querySelector('span').textContent = 'यहाँ थिच्नुहोस्';
+                
+                if (!isManualStop) {
+                    // Auto-restart if not manually stopped
+                    setTimeout(() => {
+                        if (recognizing === false) {
+                            recognition.start();
+                        }
+                    }, 100);
+                } else {
+                    statusDiv.textContent = 'मान्यता रोकियो। फेरि सुरु गर्न माइक्रोफोन थिच्नुहोस्।';
+                    micButton.querySelector('span').textContent = 'यहाँ थिच्नुहोस्';
+                }
             };
 
             recognition.onresult = (event) => {
                 clearTimeout(noAudioTimeout);
-                let interim = '';
-                let final = '';
                 
-                // Process all results
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        final += event.results[i][0].transcript;
-                    } else {
-                        interim += event.results[i][0].transcript;
-                    }
-                }
+                // Get the final result
+                const result = event.results[0][0].transcript;
                 
-                // Handle final results (prevent duplicates)
-                if (final.trim() !== '') {
-                    // Check if this is a new final result (not a duplicate)
-                    if (final.trim() !== lastFinalResult.trim()) {
-                        // Add only the new part to existing text
-                        const newPart = final.trim().replace(lastFinalResult.trim(), '').trim();
-                        if (newPart !== '') {
-                            unicodeText = (unicodeText + ' ' + newPart).trim();
-                        } else {
-                            // If no new part, just add the final result
-                            unicodeText = (unicodeText + ' ' + final).trim();
-                        }
-                        lastFinalResult = final.trim();
-                        updatePreeti();
-                    }
-                    statusDiv.textContent = 'सुनिरहनुभएको छ... नेपालीमा बोल्नुहोस्।';
-                } else if (interim.trim() !== '') {
-                    // Show interim results without saving
-                    const displayText = unicodeText + ' ' + interim;
-                    preetiTextArea.value = unicodeToPreeti(displayText);
+                if (result.trim() !== '') {
+                    // Add the new result to existing text
+                    unicodeText = (unicodeText + ' ' + result).trim();
+                    updatePreeti();
                     statusDiv.textContent = 'सुनिरहनुभएको छ... नेपालीमा बोल्नुहोस्।';
                 }
             };
@@ -232,6 +217,7 @@ function setupSpeechRecognition() {
 
             micButton.onclick = () => {
                 if (recognizing) {
+                    isManualStop = true;
                     recognition.stop();
                 } else {
                     recognition.start();
