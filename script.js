@@ -53,24 +53,25 @@ const unicodeToPreetiMap = {
 };
 
 function unicodeToPreeti(unicodeText) {
-    // Sort keys by length (longest first) to handle conjuncts properly
-    const sortedKeys = Object.keys(unicodeToPreetiMap).sort((a, b) => b.length - a.length);
-    
-    let result = unicodeText;
-    for (const key of sortedKeys) {
-        const regex = new RegExp(key, 'g');
-        result = result.replace(regex, unicodeToPreetiMap[key]);
+    try {
+        // Sort keys by length (longest first) to handle conjuncts properly
+        const sortedKeys = Object.keys(unicodeToPreetiMap).sort((a, b) => b.length - a.length);
+        
+        let result = unicodeText;
+        for (const key of sortedKeys) {
+            const regex = new RegExp(key, 'g');
+            result = result.replace(regex, unicodeToPreetiMap[key]);
+        }
+        
+        return result;
+    } catch (error) {
+        console.error('Error in unicodeToPreeti:', error);
+        return unicodeText; // Return original text if conversion fails
     }
-    
-    return result;
 }
 
 // --- DOM Elements ---
-const micButton = document.getElementById('micButton');
-const statusDiv = document.getElementById('status');
-const preetiTextArea = document.getElementById('preetiText');
-const copyBtn = document.getElementById('copyBtn');
-const resetBtn = document.getElementById('resetBtn');
+let micButton, statusDiv, preetiTextArea, copyBtn, resetBtn;
 
 // --- Speech Recognition Setup ---
 let recognition;
@@ -80,121 +81,192 @@ let noAudioTimeout;
 
 // --- Auto Reset on Page Load ---
 function resetText() {
-    unicodeText = '';
-    preetiTextArea.value = '';
-    updatePreeti();
+    try {
+        unicodeText = '';
+        if (preetiTextArea) {
+            preetiTextArea.value = '';
+        }
+        updatePreeti();
+    } catch (error) {
+        console.error('Error in resetText:', error);
+    }
+}
+
+// --- Initialize DOM elements safely ---
+function initializeElements() {
+    try {
+        micButton = document.getElementById('micButton');
+        statusDiv = document.getElementById('status');
+        preetiTextArea = document.getElementById('preetiText');
+        copyBtn = document.getElementById('copyBtn');
+        resetBtn = document.getElementById('resetBtn');
+        
+        if (!micButton || !statusDiv || !preetiTextArea || !copyBtn || !resetBtn) {
+            throw new Error('Required DOM elements not found');
+        }
+    } catch (error) {
+        console.error('Error initializing elements:', error);
+        return false;
+    }
+    return true;
 }
 
 // Reset text when page loads (new session)
-document.addEventListener('DOMContentLoaded', resetText);
+document.addEventListener('DOMContentLoaded', () => {
+    if (initializeElements()) {
+        resetText();
+        setupSpeechRecognition();
+        setupEventListeners();
+    }
+});
 
-if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRecognition();
-    recognition.lang = 'ne-NP';
-    recognition.continuous = true;
-    recognition.interimResults = true;
+function setupSpeechRecognition() {
+    try {
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.lang = 'ne-NP';
+            recognition.continuous = true;
+            recognition.interimResults = true;
 
-    recognition.onstart = () => {
-        recognizing = true;
-        micButton.classList.add('recording');
-        statusDiv.textContent = 'सुनिरहनुभएको छ... नेपालीमा बोल्नुहोस्।';
-        micButton.querySelector('span').textContent = 'सुनिरहनुभएको छ...';
-        
-        // Set timeout to check for no audio after 3 seconds
-        noAudioTimeout = setTimeout(() => {
-            if (recognizing && unicodeText.trim() === '') {
+            recognition.onstart = () => {
+                recognizing = true;
+                micButton.classList.add('recording');
+                statusDiv.textContent = 'सुनिरहनुभएको छ... नेपालीमा बोल्नुहोस्।';
+                micButton.querySelector('span').textContent = 'सुनिरहनुभएको छ...';
+                
+                // Set timeout to check for no audio after 3 seconds
+                noAudioTimeout = setTimeout(() => {
+                    if (recognizing && unicodeText.trim() === '') {
+                        statusDiv.textContent = 'तपाईंको आवाज सुनिएको छैन, कृपया ठूलो बोल्नुहोस्';
+                    }
+                }, 3000);
+            };
+
+            recognition.onerror = (event) => {
+                clearTimeout(noAudioTimeout);
+                let errorMessage = 'त्रुटि: ' + event.error;
+                
+                // Provide more specific error messages
+                switch(event.error) {
+                    case 'not-allowed':
+                        errorMessage = 'माइक्रोफोन अनुमति दिनुहोस्';
+                        break;
+                    case 'no-speech':
+                        errorMessage = 'कुनै आवाज सुनिएन, कृपया बोल्नुहोस्';
+                        break;
+                    case 'network':
+                        errorMessage = 'नेटवर्क समस्या, कृपया फेरि प्रयास गर्नुहोस्';
+                        break;
+                }
+                
+                statusDiv.textContent = errorMessage;
+                micButton.classList.remove('recording');
+                micButton.querySelector('span').textContent = 'यहाँ थिच्नुहोस्';
+                recognizing = false;
+            };
+
+            recognition.onend = () => {
+                clearTimeout(noAudioTimeout);
+                recognizing = false;
+                micButton.classList.remove('recording');
+                statusDiv.textContent = 'मान्यता रोकियो। फेरि सुरु गर्न माइक्रोफोन थिच्नुहोस्।';
+                micButton.querySelector('span').textContent = 'यहाँ थिच्नुहोस्';
+            };
+
+            recognition.onresult = (event) => {
+                clearTimeout(noAudioTimeout);
+                let interim = '';
+                let final = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        final += event.results[i][0].transcript;
+                    } else {
+                        interim += event.results[i][0].transcript;
+                    }
+                }
+                
+                if (final.trim() !== '' || interim.trim() !== '') {
+                    unicodeText = (unicodeText + ' ' + final + interim).trim();
+                    updatePreeti();
+                    statusDiv.textContent = 'सुनिरहनुभएको छ... नेपालीमा बोल्नुहोस्।';
+                }
+            };
+
+            recognition.onnomatch = () => {
                 statusDiv.textContent = 'तपाईंको आवाज सुनिएको छैन, कृपया ठूलो बोल्नुहोस्';
-            }
-        }, 3000);
-    };
+            };
 
-    recognition.onerror = (event) => {
-        clearTimeout(noAudioTimeout);
-        statusDiv.textContent = 'त्रुटि: ' + event.error;
-        micButton.classList.remove('recording');
-        micButton.querySelector('span').textContent = 'यहाँ थिच्नुहोस्';
-        recognizing = false;
-    };
+            recognition.onaudiostart = () => {
+                statusDiv.textContent = 'सुनिरहनुभएको छ... नेपालीमा बोल्नुहोस्।';
+            };
 
-    recognition.onend = () => {
-        clearTimeout(noAudioTimeout);
-        recognizing = false;
-        micButton.classList.remove('recording');
-        statusDiv.textContent = 'मान्यता रोकियो। फेरि सुरु गर्न माइक्रोफोन थिच्नुहोस्।';
-        micButton.querySelector('span').textContent = 'यहाँ थिच्नुहोस्';
-    };
+            recognition.onaudioend = () => {
+                if (recognizing && unicodeText.trim() === '') {
+                    statusDiv.textContent = 'तपाईंको आवाज सुनिएको छैन, कृपया ठूलो बोल्नुहोस्';
+                }
+            };
 
-    recognition.onresult = (event) => {
-        clearTimeout(noAudioTimeout);
-        let interim = '';
-        let final = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-                final += event.results[i][0].transcript;
-            } else {
-                interim += event.results[i][0].transcript;
-            }
-        }
-        
-        if (final.trim() !== '' || interim.trim() !== '') {
-            unicodeText = (unicodeText + ' ' + final + interim).trim();
-            updatePreeti();
-            statusDiv.textContent = 'सुनिरहनुभएको छ... नेपालीमा बोल्नुहोस्।';
-        }
-    };
-
-    recognition.onnomatch = () => {
-        statusDiv.textContent = 'तपाईंको आवाज सुनिएको छैन, कृपया ठूलो बोल्नुहोस्';
-    };
-
-    recognition.onaudiostart = () => {
-        statusDiv.textContent = 'सुनिरहनुभएको छ... नेपालीमा बोल्नुहोस्।';
-    };
-
-    recognition.onaudioend = () => {
-        if (recognizing && unicodeText.trim() === '') {
-            statusDiv.textContent = 'तपाईंको आवाज सुनिएको छैन, कृपया ठूलो बोल्नुहोस्';
-        }
-    };
-
-    micButton.onclick = () => {
-        if (recognizing) {
-            recognition.stop();
+            micButton.onclick = () => {
+                if (recognizing) {
+                    recognition.stop();
+                } else {
+                    recognition.start();
+                }
+            };
         } else {
-            recognition.start();
+            statusDiv.textContent = 'माफ गर्नुहोस्, तपाईंको ब्राउजरले Speech Recognition समर्थन गर्दैन। Google Chrome प्रयोग गर्नुहोस्।';
+            micButton.disabled = true;
         }
-    };
-} else {
-    statusDiv.textContent = 'माफ गर्नुहोस्, तपाईंको ब्राउजरले Speech Recognition समर्थन गर्दैन। Google Chrome प्रयोग गर्नुहोस्।';
-    micButton.disabled = true;
+    } catch (error) {
+        console.error('Error setting up speech recognition:', error);
+        statusDiv.textContent = 'सिस्टम त्रुटि, कृपया पेज रिफ्रेश गर्नुहोस्';
+        micButton.disabled = true;
+    }
 }
 
-// --- Copy Button ---
-copyBtn.onclick = () => {
-    const text = preetiTextArea.value;
-    navigator.clipboard.writeText(text);
-    statusDiv.textContent = 'क्लिपबोर्डमा कपी गरियो!';
-    setTimeout(() => statusDiv.textContent = '', 1500);
-};
+function setupEventListeners() {
+    try {
+        // --- Copy Button ---
+        copyBtn.onclick = async () => {
+            try {
+                const text = preetiTextArea.value;
+                await navigator.clipboard.writeText(text);
+                statusDiv.textContent = 'क्लिपबोर्डमा कपी गरियो!';
+                setTimeout(() => statusDiv.textContent = '', 1500);
+            } catch (error) {
+                console.error('Copy failed:', error);
+                statusDiv.textContent = 'कपी गर्न सकिएन, कृपया माथि-सी (Ctrl+C) प्रयोग गर्नुहोस्';
+            }
+        };
 
-// --- Reset Button ---
-resetBtn.onclick = () => {
-    resetText();
-    statusDiv.textContent = 'टेक्स्ट सफा गरियो!';
-    setTimeout(() => statusDiv.textContent = '', 1500);
-};
+        // --- Reset Button ---
+        resetBtn.onclick = () => {
+            resetText();
+            statusDiv.textContent = 'टेक्स्ट सफा गरियो!';
+            setTimeout(() => statusDiv.textContent = '', 1500);
+        };
+
+        // --- Update Preeti on manual typing ---
+        preetiTextArea.addEventListener('input', function() {
+            unicodeText = preetiTextArea.value;
+            updatePreeti();
+        });
+    } catch (error) {
+        console.error('Error setting up event listeners:', error);
+    }
+}
 
 // --- Update Preeti ---
 function updatePreeti() {
-    preetiTextArea.value = unicodeToPreeti(unicodeText);
+    try {
+        if (preetiTextArea) {
+            preetiTextArea.value = unicodeToPreeti(unicodeText);
+        }
+    } catch (error) {
+        console.error('Error updating Preeti:', error);
+    }
 }
-
-// --- Update Preeti on manual typing ---
-preetiTextArea.addEventListener('input', function() {
-    unicodeText = preetiTextArea.value; // This will not convert back to Unicode, but allows manual editing
-    updatePreeti();
-});
 
 // --- Initial call ---
 updatePreeti(); 
